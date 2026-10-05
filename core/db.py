@@ -1,184 +1,391 @@
+"""ATA v3 persistence layer with project isolation.
+
+Backends:
+- DATABASE_URL=postgresql://... -> managed PostgreSQL (recommended for Vercel/SaaS)
+- otherwise SQLite in ATA_DATA_DIR (recommended for local/self-hosted single server)
+
+Every thesis row is project-scoped and every project belongs to an opaque browser
+session. There is no process-global "active thesis" state.
 """
-db.py - SQLite Database Engine for ATA v2
-Implements the 10-Tier Data Model according to ATA-v2-spesifikasi.md.
-"""
-import sqlite3
+from __future__ import annotations
+
 import json
 import os
-from typing import Dict, Any, List, Optional
-from datetime import datetime
+import secrets
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional
 
-if os.environ.get("VERCEL"):
-    DB_PATH = "/tmp/ata_v2.db"
-    src_db = os.path.join(os.path.dirname(__file__), "ata_v2.db")
-    if os.path.exists(src_db) and not os.path.exists(DB_PATH):
-        import shutil
+_SCHEMA_VERSION = 3
+
+
+def _backend() -> str:
+    return 'postgres' if os.getenv('DATABASE_URL', '').startswith(('postgres://','postgresql://')) else 'sqlite'
+
+
+def _data_dir() -> Path:
+    base = os.getenv('ATA_DATA_DIR')
+    if base:
+        p = Path(base)
+    elif os.getenv('VERCEL'):
+        p = Path('/tmp/ata-v3')
+    else:
+        p = Path(__file__).resolve().parent / 'data'
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _db_path() -> Path:
+    return _data_dir() / 'ata_v3.db'
+
+
+def _translate_qmark(sql: str) -> str:
+    """Convert qmark placeholders to psycopg placeholders.
+    SQL in this module contains no literal question marks.
+    """
+    return sql.replace('?', '%s')
+
+
+class _PGResult:
+    def __init__(self, cursor): self._cursor = cursor
+    @property
+    def rowcount(self): return self._cursor.rowcount
+    def fetchone(self): return self._cursor.fetchone()
+    def fetchall(self): return self._cursor.fetchall()
+
+
+class _PGConnection:
+    def __init__(self):
         try:
-            shutil.copy2(src_db, DB_PATH)
-        except Exception:
-            pass
-else:
-    DB_PATH = os.path.join(os.path.dirname(__file__), "ata_v2.db")
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as e:
+            raise RuntimeError('DATABASE_URL diset tetapi psycopg belum terpasang. Jalankan pip install -r requirements.txt') from e
+        self._conn = psycopg.connect(os.environ['DATABASE_URL'], row_factory=dict_row)
+    def execute(self, sql, params=()):
+        return _PGResult(self._conn.execute(_translate_qmark(sql), params))
+    def executescript(self, script):
+        for statement in [x.strip() for x in script.split(';') if x.strip()]:
+            self._conn.execute(statement)
+    def __enter__(self): return self
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            if exc_type is None: self._conn.commit()
+            else: self._conn.rollback()
+        finally: self._conn.close()
+        return False
+    def close(self): self._conn.close()
 
-def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
 
-def init_db(db_path: str = DB_PATH):
-    """Initialize database tables according to ATA v2 Specification"""
-    conn = get_connection(db_path)
-    cur = conn.cursor()
+class _SQLiteConnection:
+    def __init__(self, path: str):
+        self._conn = sqlite3.connect(path, timeout=20)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute('PRAGMA foreign_keys = ON')
+        self._conn.execute('PRAGMA journal_mode = WAL')
+    def execute(self, sql, params=()): return self._conn.execute(sql, params)
+    def executescript(self, script): return self._conn.executescript(script)
+    def __enter__(self): return self
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            if exc_type is None: self._conn.commit()
+            else: self._conn.rollback()
+        finally: self._conn.close()
+        return False
+    def close(self): self._conn.close()
 
-    cur.executescript("""
-    CREATE TABLE IF NOT EXISTS supervisor_directive (
-        id TEXT PRIMARY KEY,
-        session_id TEXT NOT NULL,
-        quote TEXT NOT NULL,
-        directive TEXT NOT NULL,
-        priority TEXT CHECK (priority IN ('MUST','SHOULD','NICE')),
-        target_chapter TEXT,
-        status TEXT CHECK (status IN ('open','addressed','clarify')) DEFAULT 'open',
-        evidence_ref TEXT
-    );
 
-    CREATE TABLE IF NOT EXISTS source (
-        id TEXT PRIMARY KEY,
-        type TEXT CHECK (type IN ('journal','book','regulation','news','interview','report')),
-        doi TEXT,
-        title TEXT NOT NULL,
-        authors TEXT NOT NULL,
-        year INTEGER,
-        verified INTEGER DEFAULT 0,
-        brief_json TEXT
-    );
+def get_connection(db_path: Optional[str] = None):
+    if _backend() == 'postgres' and db_path is None:
+        return _PGConnection()
+    return _SQLiteConnection(db_path or str(_db_path()))
 
-    CREATE TABLE IF NOT EXISTS evidence (
-        id TEXT PRIMARY KEY,
-        source_id TEXT REFERENCES source(id),
-        locator TEXT NOT NULL,
-        text TEXT NOT NULL
-    );
 
-    CREATE TABLE IF NOT EXISTS claim (
-        id TEXT PRIMARY KEY,
-        chapter TEXT NOT NULL,
-        sentence TEXT NOT NULL,
-        evidence_ids TEXT NOT NULL, -- JSON array of evidence ids
-        support TEXT CHECK (support IN ('supported','partial','unsupported')),
-        author_origin TEXT CHECK (author_origin IN ('student','ai_expanded','ai_suggested'))
-    );
+def reset_for_tests() -> None:
+    if _backend() != 'sqlite':
+        return
+    path = _db_path()
+    for suffix in ('', '-wal', '-shm'):
+        try: Path(str(path) + suffix).unlink()
+        except FileNotFoundError: pass
 
-    CREATE TABLE IF NOT EXISTS consistency_row (
-        element TEXT PRIMARY KEY,
-        content TEXT,
-        score INTEGER CHECK (score BETWEEN 1 AND 4),
-        critique TEXT
-    );
 
-    CREATE TABLE IF NOT EXISTS ai_usage_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        agent TEXT NOT NULL,
-        action TEXT NOT NULL,
-        artifact TEXT
-    );
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS project (
+    id TEXT PRIMARY KEY, session_id TEXT NOT NULL, name TEXT NOT NULL, student TEXT NOT NULL,
+    program TEXT NOT NULL, advisor TEXT, topic TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'umum',
+    method TEXT NOT NULL DEFAULT 'survey', stage TEXT NOT NULL DEFAULT 'start', deadline TEXT,
+    institution TEXT, insider INTEGER NOT NULL DEFAULT 0, language TEXT NOT NULL DEFAULT 'Indonesia',
+    campus TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_project_session ON project(session_id, updated_at DESC);
+CREATE TABLE IF NOT EXISTS project_state (
+    session_id TEXT PRIMARY KEY, active_project_id TEXT,
+    FOREIGN KEY(active_project_id) REFERENCES project(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS supervisor_directive (
+    project_id TEXT NOT NULL, id TEXT NOT NULL, session_label TEXT, quote TEXT NOT NULL DEFAULT '',
+    directive TEXT NOT NULL, priority TEXT NOT NULL CHECK(priority IN ('MUST','SHOULD','NICE')),
+    target_chapter TEXT, status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','addressed','clarify')),
+    evidence_ref TEXT, created_at TEXT NOT NULL, PRIMARY KEY(project_id,id),
+    FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS source (
+    project_id TEXT NOT NULL, id TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'journal', doi TEXT, url TEXT,
+    title TEXT NOT NULL, authors TEXT NOT NULL DEFAULT '[]', year INTEGER, verified INTEGER NOT NULL DEFAULT 0,
+    verification_status TEXT NOT NULL DEFAULT 'candidate', brief_json TEXT, created_at TEXT NOT NULL,
+    PRIMARY KEY(project_id,id), FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_source_project_verified ON source(project_id, verified, year);
+CREATE TABLE IF NOT EXISTS evidence (
+    project_id TEXT NOT NULL, id TEXT NOT NULL, source_id TEXT NOT NULL, locator TEXT NOT NULL, text TEXT NOT NULL,
+    PRIMARY KEY(project_id,id), FOREIGN KEY(project_id,source_id) REFERENCES source(project_id,id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS claim (
+    project_id TEXT NOT NULL, id TEXT NOT NULL, chapter TEXT, sentence TEXT NOT NULL,
+    evidence_ids TEXT NOT NULL DEFAULT '[]', support TEXT NOT NULL DEFAULT 'unsupported',
+    author_origin TEXT NOT NULL DEFAULT 'student', PRIMARY KEY(project_id,id),
+    FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS consistency_row (
+    project_id TEXT NOT NULL, element TEXT NOT NULL, content TEXT, score INTEGER CHECK(score BETWEEN 1 AND 4),
+    critique TEXT, PRIMARY KEY(project_id,element), FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS gate_assessment (
+    project_id TEXT NOT NULL, gate TEXT NOT NULL, data_json TEXT NOT NULL, updated_at TEXT NOT NULL,
+    PRIMARY KEY(project_id,gate), FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS artifact (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, version INTEGER NOT NULL,
+    content TEXT NOT NULL, source_refs TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL,
+    UNIQUE(project_id,kind,title,version), FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_artifact_lookup ON artifact(project_id,kind,title,version DESC);
+CREATE TABLE IF NOT EXISTS revision_task (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL, directive_id TEXT, target_kind TEXT, target_title TEXT,
+    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','proposed','accepted','rejected','done')),
+    before_text TEXT, proposed_text TEXT, rationale TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS defense_score (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL, question TEXT NOT NULL, answer TEXT,
+    score INTEGER CHECK(score BETWEEN 1 AND 4), feedback TEXT, created_at TEXT NOT NULL,
+    FOREIGN KEY(project_id) REFERENCES project(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS ai_usage_log (
+    id TEXT PRIMARY KEY, project_id TEXT, ts TEXT NOT NULL, agent TEXT NOT NULL, action TEXT NOT NULL, artifact TEXT
+);
+"""
 
-    CREATE TABLE IF NOT EXISTS survey_construct (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        definition TEXT NOT NULL,
-        source_id TEXT REFERENCES source(id)
-    );
 
-    CREATE TABLE IF NOT EXISTS survey_item (
-        id TEXT PRIMARY KEY,
-        construct_id TEXT REFERENCES survey_construct(id),
-        text_id TEXT NOT NULL,
-        text_origin TEXT,
-        reversed INTEGER DEFAULT 0,
-        source_id TEXT REFERENCES source(id)
-    );
+def init_db(db_path: Optional[str] = None) -> None:
+    with get_connection(db_path) as conn:
+        conn.executescript(_SCHEMA)
+        conn.execute("INSERT INTO meta(key,value) VALUES('schema_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(_SCHEMA_VERSION),))
 
-    CREATE TABLE IF NOT EXISTS analysis_plan (
-        id TEXT PRIMARY KEY,
-        hypothesis TEXT NOT NULL,
-        test TEXT NOT NULL,
-        locked_at TIMESTAMP,
-        plan_hash TEXT
-    );
-    """)
 
-    # Seed supervisor directives if empty
-    cur.execute("SELECT COUNT(*) FROM supervisor_directive")
-    if cur.fetchone()[0] == 0:
-        directives = [
-            ("BH1-01", "Bu Henni 1", "kepercayaan masyarakat itu sebenarnya menipis ke pemerintah", "Jadikan kepercayaan publik terhadap lembaga sebagai masalah inti", "MUST", "I", "open", None),
-            ("BH1-02", "Bu Henni 1", "Tete harus baca buku dari ... Wombrun dan Funreal", "Pakai van Riel & Fombrun sebagai landasan teori utama", "MUST", "II", "clarify", None),
-            ("BH1-03", "Bu Henni 1", "lembaga-lembaga pemerintah kita crisis ... karena perilaku pemerintah", "Bingkai konteks sebagai situasi krisis kepercayaan", "MUST", "I", "open", None),
-            ("BH1-04", "Bu Henni 1", "ada manajemen isu di lembaga pemerintahan", "Masukkan kerangka issues management", "MUST", "II", "open", None),
-            ("BH1-05", "Bu Henni 1", "medianya masih media kecil ... bukan media mainstream", "Analisis lanskap relasi media LKPP", "MUST", "IV", "open", None),
-            ("BH1-06", "Bu Henni 1", "pake konsultan ... harusnya jangan", "Evaluasi media relations via pihak ketiga; rekomendasi relasi langsung", "SHOULD", "IV", "open", None),
-            ("BH1-07", "Bu Henni 1", "memprioritaskan konten ke arah program-program kebijakan prioritas", "Kaitkan strategi konten dengan program prioritas nasional", "SHOULD", "IV", "open", None),
-            ("BH1-08", "Bu Henni 1", "LKPP dibawa presiden langsung", "Jelaskan perubahan kedudukan kelembagaan dan implikasi risikonya", "SHOULD", "I", "open", None),
-            ("BH1-09", "Bu Henni 1", "masukannya untuk strategi komunikasi ... harusnya gini lho", "Output = rekomendasi strategi/perencanaan komunikasi", "MUST", "V", "open", None),
-            ("BH1-10", "Bu Henni 1", "pendekatan komunikasi ... untuk mendapatkan kepercayaan publik", "Arah judul: pendekatan komunikasi kelembagaan untuk kepercayaan publik", "MUST", "Judul", "open", None),
-            ("BH1-11", "Bu Henni 1", "draft yang saya bikin ... kirimkan dulu ke ibu? Boleh", "Kirim draf awal ke pembimbing sebelum lanjut", "MUST", "Proses", "open", None)
-        ]
-        cur.executemany("""
-            INSERT INTO supervisor_directive (id, session_id, quote, directive, priority, target_chapter, status, evidence_ref)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, directives)
+def _now() -> str: return datetime.now(timezone.utc).isoformat()
+def _id(prefix: str) -> str: return prefix + '_' + secrets.token_urlsafe(9).replace('-','').replace('_','')[:12]
 
-    # Seed consistency rows if empty
-    cur.execute("SELECT COUNT(*) FROM consistency_row")
-    if cur.fetchone()[0] == 0:
-        rows = [
-            ("Judul", "Strategi Komunikasi Korporat LKPP dalam Membangun Kepercayaan Publik", 3, "Sesuai arahan BH1-10"),
-            ("Masalah", "Krisis kepercayaan publik dan ketergantungan media humas pada konsultan pihak ketiga", 3, "Sesuai arahan BH1-01, BH1-03, BH1-05"),
-            ("Rumusan Masalah", "RQ1: Kondisi eksisting komunikasi; RQ2: Manajemen isu & relasi media; RQ3: Rekomendasi strategi", 3, "FINER score memenuhi kriteria"),
-            ("Tujuan", "Menganalisis strategi, evaluasi isu/media, menyusun strategi komunikasi", 3, "Selaras dengan RQ"),
-            ("Teori", "Corporate Communication (van Riel & Fombrun); Issues Management; OECD Trust", 2, "Perlu konfirmasi edisi buku van Riel & Fombrun ke Bu Henni"),
-            ("Metode", "Mixed Methods Sekuensial Eksplanatori (Survei pemangku kepentingan + Wawancara Humas)", 3, "Efektif dan menjawab arahan BH1-09"),
-            ("Temuan", "Menunggu pengumpulan data", 1, "Belum ada data lapangan"),
-            ("Kesimpulan", "Menunggu analisis Bab IV", 1, "Belum selesai"),
-            ("Rekomendasi", "Menunggu analisis Bab IV", 1, "Wajib punya jejak ke data Bab IV")
-        ]
-        cur.executemany("INSERT INTO consistency_row VALUES (?, ?, ?, ?)", rows)
 
-    conn.commit()
-    conn.close()
-    print("Database initialized successfully at:", db_path)
+def create_project(session_id: str, data: Dict[str, Any]) -> str:
+    init_db(); pid = _id('th'); now = _now()
+    topic=(data.get('topic') or 'Tesis baru').strip(); program=(data.get('program') or 'Program Magister').strip(); student=(data.get('student') or 'Mahasiswa').strip(); name=(data.get('name') or topic or program)[:120]
+    with get_connection() as conn:
+        conn.execute("""INSERT INTO project
+        (id,session_id,name,student,program,advisor,topic,domain,method,stage,deadline,institution,insider,language,campus,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (pid,session_id,name,student,program,data.get('advisor'),topic,data.get('domain') or 'umum',data.get('method') or 'survey',data.get('stage') or 'start',data.get('deadline'),data.get('institution'),1 if data.get('insider') else 0,data.get('language') or 'Indonesia',data.get('campus'),now,now))
+        conn.execute("INSERT INTO project_state(session_id,active_project_id) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET active_project_id=excluded.active_project_id",(session_id,pid))
+    return pid
 
-def log_ai_usage(agent: str, action: str, artifact: str = ""):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("INSERT INTO ai_usage_log (agent, action, artifact) VALUES (?, ?, ?)", (agent, action, artifact))
-    conn.commit()
-    conn.close()
 
-def get_directives(status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-    conn = get_connection()
-    cur = conn.cursor()
-    if status_filter:
-        cur.execute("SELECT * FROM supervisor_directive WHERE status = ? ORDER BY id", (status_filter,))
-    else:
-        cur.execute("SELECT * FROM supervisor_directive ORDER BY id")
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return rows
-
-def update_directive_status(directive_id: str, new_status: str, evidence_ref: Optional[str] = None):
-    conn = get_connection()
-    cur = conn.cursor()
-    if evidence_ref is not None:
-        cur.execute("UPDATE supervisor_directive SET status = ?, evidence_ref = ? WHERE id = ?", (new_status, evidence_ref, directive_id))
-    else:
-        cur.execute("UPDATE supervisor_directive SET status = ? WHERE id = ?", (new_status, directive_id))
-    conn.commit()
-    conn.close()
-
-if __name__ == "__main__":
+def list_projects(session_id: str) -> List[Dict[str, Any]]:
     init_db()
-    directives = get_directives()
-    print(f"Loaded {len(directives)} directives from Bu Henni.")
+    with get_connection() as conn: rows=conn.execute('SELECT * FROM project WHERE session_id=? ORDER BY updated_at DESC',(session_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_project_for_session(session_id: str, project_id: str) -> Optional[Dict[str, Any]]:
+    init_db()
+    with get_connection() as conn: row=conn.execute('SELECT * FROM project WHERE id=? AND session_id=?',(project_id,session_id)).fetchone()
+    return dict(row) if row else None
+
+
+def get_active_project(session_id: str) -> Optional[Dict[str, Any]]:
+    init_db()
+    with get_connection() as conn:
+        row=conn.execute('SELECT p.* FROM project_state s JOIN project p ON p.id=s.active_project_id WHERE s.session_id=? AND p.session_id=?',(session_id,session_id)).fetchone()
+        if not row: row=conn.execute('SELECT * FROM project WHERE session_id=? ORDER BY updated_at DESC LIMIT 1',(session_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def set_active_project(session_id: str, project_id: str) -> bool:
+    if not get_project_for_session(session_id,project_id): return False
+    with get_connection() as conn: conn.execute("INSERT INTO project_state(session_id,active_project_id) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET active_project_id=excluded.active_project_id",(session_id,project_id))
+    return True
+
+
+def update_project(session_id: str, project_id: str, changes: Dict[str, Any]) -> bool:
+    allowed={'name','student','program','advisor','topic','domain','method','stage','deadline','institution','language','campus'}; vals={k:v for k,v in changes.items() if k in allowed}
+    if 'insider' in changes: vals['insider']=1 if changes['insider'] else 0
+    if not vals or not get_project_for_session(session_id,project_id): return False
+    vals['updated_at']=_now(); sql=', '.join(f'{k}=?' for k in vals); params=list(vals.values())+[project_id,session_id]
+    with get_connection() as conn: conn.execute(f'UPDATE project SET {sql} WHERE id=? AND session_id=?',params)
+    return True
+
+
+def get_directives(project_id: str, status_filter: Optional[str]=None) -> List[Dict[str, Any]]:
+    init_db(); q='SELECT * FROM supervisor_directive WHERE project_id=?'; params=[project_id]
+    if status_filter: q+=' AND status=?'; params.append(status_filter)
+    q+=' ORDER BY id'
+    with get_connection() as conn: rows=conn.execute(q,params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_directives(project_id: str, directives: Iterable[Dict[str, Any]]) -> int:
+    init_db(); count=0; now=_now()
+    with get_connection() as conn:
+        for d in directives:
+            did=str(d.get('id') or '').strip(); directive=str(d.get('directive') or '').strip()
+            if not did or not directive: continue
+            priority=str(d.get('priority') or 'SHOULD').upper(); priority=priority if priority in {'MUST','SHOULD','NICE'} else 'SHOULD'
+            status=str(d.get('status') or 'open'); status=status if status in {'open','addressed','clarify'} else 'open'
+            conn.execute("""INSERT INTO supervisor_directive(project_id,id,session_label,quote,directive,priority,target_chapter,status,evidence_ref,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(project_id,id) DO UPDATE SET session_label=excluded.session_label,quote=excluded.quote,directive=excluded.directive,priority=excluded.priority,target_chapter=excluded.target_chapter,status=excluded.status,evidence_ref=excluded.evidence_ref""",
+            (project_id,did,d.get('session_label'),d.get('quote') or '',directive,priority,d.get('target_chapter'),status,d.get('evidence_ref'),now)); count+=1
+    return count
+
+
+def update_directive_status(project_id: str, directive_id: str, new_status: str, evidence_ref: Optional[str]=None) -> bool:
+    if new_status not in {'open','addressed','clarify'}: return False
+    with get_connection() as conn: cur=conn.execute('UPDATE supervisor_directive SET status=?,evidence_ref=? WHERE project_id=? AND id=?',(new_status,evidence_ref,project_id,directive_id))
+    return cur.rowcount>0
+
+
+def save_gate_assessment(project_id: str, gate: str, data: Dict[str, Any]) -> None:
+    with get_connection() as conn: conn.execute("INSERT INTO gate_assessment(project_id,gate,data_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(project_id,gate) DO UPDATE SET data_json=excluded.data_json,updated_at=excluded.updated_at",(project_id,gate,json.dumps(data,ensure_ascii=False),_now()))
+
+
+def get_gate_assessment(project_id: str, gate: str) -> Dict[str, Any]:
+    with get_connection() as conn: row=conn.execute('SELECT data_json FROM gate_assessment WHERE project_id=? AND gate=?',(project_id,gate)).fetchone()
+    if not row: return {}
+    raw=row['data_json'] if isinstance(row,dict) or hasattr(row,'keys') else row[0]
+    try: value=json.loads(raw); return value if isinstance(value,dict) else {}
+    except (ValueError,TypeError): return {}
+
+
+def save_source(project_id: str, source: Dict[str, Any]) -> str:
+    sid=str(source.get('id') or _id('src')); authors=source.get('authors') or []; authors=authors if isinstance(authors,list) else [str(authors)]
+    with get_connection() as conn: conn.execute("""INSERT INTO source(project_id,id,type,doi,url,title,authors,year,verified,verification_status,brief_json,created_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(project_id,id) DO UPDATE SET type=excluded.type,doi=excluded.doi,url=excluded.url,title=excluded.title,authors=excluded.authors,year=excluded.year,verified=excluded.verified,verification_status=excluded.verification_status,brief_json=COALESCE(excluded.brief_json,source.brief_json)""",
+    (project_id,sid,source.get('type') or 'journal',source.get('doi'),source.get('url'),source.get('title') or 'Untitled',json.dumps(authors,ensure_ascii=False),source.get('year'),1 if source.get('verified') else 0,source.get('verification_status') or 'candidate',json.dumps(source.get('brief_json'),ensure_ascii=False) if source.get('brief_json') is not None else None,_now()))
+    return sid
+
+
+def list_sources(project_id: str, verified_only: bool=False) -> List[Dict[str, Any]]:
+    q='SELECT * FROM source WHERE project_id=?'+(' AND verified=1' if verified_only else '')+' ORDER BY year DESC,title'
+    with get_connection() as conn: rows=conn.execute(q,(project_id,)).fetchall()
+    out=[]
+    for r in rows:
+        d=dict(r)
+        try:d['authors']=json.loads(d.get('authors') or '[]')
+        except ValueError:d['authors']=[]
+        d['verified']=bool(d.get('verified')); out.append(d)
+    return out
+
+
+def save_artifact(project_id: str, kind: str, title: str, content: str, source_refs: Optional[List[str]]=None) -> Dict[str, Any]:
+    now=_now(); aid=_id('art')
+    with get_connection() as conn:
+        row=conn.execute('SELECT COALESCE(MAX(version),0) AS max_version FROM artifact WHERE project_id=? AND kind=? AND title=?',(project_id,kind,title)).fetchone(); version=int(row['max_version'])+1
+        conn.execute('INSERT INTO artifact(id,project_id,kind,title,version,content,source_refs,created_at) VALUES(?,?,?,?,?,?,?,?)',(aid,project_id,kind,title,version,content,json.dumps(source_refs or []),now))
+    return {'id':aid,'project_id':project_id,'kind':kind,'title':title,'version':version,'content':content,'created_at':now}
+
+
+def list_artifacts(project_id: str) -> List[Dict[str, Any]]:
+    with get_connection() as conn: rows=conn.execute("""SELECT a.* FROM artifact a JOIN (SELECT kind,title,MAX(version) v FROM artifact WHERE project_id=? GROUP BY kind,title) latest ON a.kind=latest.kind AND a.title=latest.title AND a.version=latest.v WHERE a.project_id=? ORDER BY a.created_at DESC""",(project_id,project_id)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_artifact_versions(project_id: str, kind: str, title: str) -> List[Dict[str, Any]]:
+    with get_connection() as conn: rows=conn.execute('SELECT * FROM artifact WHERE project_id=? AND kind=? AND title=? ORDER BY version DESC',(project_id,kind,title)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def log_ai_usage(agent: str, action: str, artifact: str='', project_id: Optional[str]=None) -> None:
+    init_db()
+    with get_connection() as conn: conn.execute('INSERT INTO ai_usage_log(id,project_id,ts,agent,action,artifact) VALUES(?,?,?,?,?,?)',(_id('log'),project_id,_now(),agent,action,artifact))
+
+
+def storage_status() -> Dict[str, Any]:
+    if _backend()=='postgres': return {'backend':'postgres','path':None,'ephemeral':False,'production_ready':True,'warning':None}
+    path=_db_path(); ephemeral=str(path).startswith('/tmp/')
+    return {'backend':'sqlite','path':str(path),'ephemeral':ephemeral,'production_ready':not ephemeral,'warning':'Vercel /tmp bersifat ephemeral. Set DATABASE_URL ke managed PostgreSQL untuk produksi.' if ephemeral else None}
+
+# --- v3 complete feature helpers (no schema topology change) ---
+def get_artifact(project_id: str, artifact_id: str) -> Optional[Dict[str, Any]]:
+    with get_connection() as conn:
+        row=conn.execute('SELECT * FROM artifact WHERE project_id=? AND id=?',(project_id,artifact_id)).fetchone()
+    return dict(row) if row else None
+
+
+def save_evidence(project_id: str, source_id: str, locator: str, text: str, evidence_id: Optional[str]=None) -> str:
+    eid=evidence_id or _id('ev')
+    with get_connection() as conn:
+        conn.execute('INSERT INTO evidence(project_id,id,source_id,locator,text) VALUES(?,?,?,?,?) ON CONFLICT(project_id,id) DO UPDATE SET source_id=excluded.source_id,locator=excluded.locator,text=excluded.text',(project_id,eid,source_id,locator,text))
+    return eid
+
+
+def list_evidence(project_id: str, source_id: Optional[str]=None) -> List[Dict[str, Any]]:
+    sql='SELECT * FROM evidence WHERE project_id=?'; params=[project_id]
+    if source_id is not None: sql+=' AND source_id=?'; params.append(source_id)
+    sql+=' ORDER BY source_id,locator,id'
+    with get_connection() as conn: rows=conn.execute(sql,params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_revision_task(project_id: str, directive_id: Optional[str], target_kind: str, target_title: str, before_text: str, proposed_text: str, rationale: str='') -> Dict[str, Any]:
+    rid=_id('rev'); now=_now()
+    with get_connection() as conn:
+        conn.execute('INSERT INTO revision_task(id,project_id,directive_id,target_kind,target_title,status,before_text,proposed_text,rationale,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(rid,project_id,directive_id,target_kind,target_title,'proposed',before_text,proposed_text,rationale,now,now))
+    return get_revision_task(project_id,rid) or {}
+
+
+def get_revision_task(project_id: str, revision_id: str) -> Optional[Dict[str, Any]]:
+    with get_connection() as conn: row=conn.execute('SELECT * FROM revision_task WHERE project_id=? AND id=?',(project_id,revision_id)).fetchone()
+    return dict(row) if row else None
+
+
+def list_revision_tasks(project_id: str) -> List[Dict[str, Any]]:
+    with get_connection() as conn: rows=conn.execute('SELECT * FROM revision_task WHERE project_id=? ORDER BY created_at DESC',(project_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_revision_task_status(project_id: str, revision_id: str, status: str) -> bool:
+    if status not in {'open','proposed','accepted','rejected','done'}: return False
+    with get_connection() as conn: cur=conn.execute('UPDATE revision_task SET status=?,updated_at=? WHERE project_id=? AND id=?',(status,_now(),project_id,revision_id))
+    return cur.rowcount>0
+
+
+def save_defense_score(project_id: str, question: str, answer: str, score: int, feedback: str, weakness: str='') -> str:
+    if not isinstance(score,int) or isinstance(score,bool) or score < 1 or score > 4: raise ValueError('score harus 1-4')
+    did=_id('def'); payload=json.dumps({'feedback':feedback,'weakness':weakness},ensure_ascii=False)
+    with get_connection() as conn: conn.execute('INSERT INTO defense_score(id,project_id,question,answer,score,feedback,created_at) VALUES(?,?,?,?,?,?,?)',(did,project_id,question,answer,score,payload,_now()))
+    return did
+
+
+def list_defense_scores(project_id: str, limit: int=100) -> List[Dict[str, Any]]:
+    with get_connection() as conn: rows=conn.execute('SELECT * FROM defense_score WHERE project_id=? ORDER BY created_at DESC LIMIT ?',(project_id,max(1,min(int(limit),500)))).fetchall()
+    out=[]
+    for row in rows:
+        d=dict(row); raw=d.get('feedback') or ''
+        try:
+            parsed=json.loads(raw)
+            if isinstance(parsed,dict): d['feedback']=str(parsed.get('feedback') or ''); d['weakness']=str(parsed.get('weakness') or '')
+            else: d['weakness']=''
+        except (ValueError,TypeError): d['weakness']=''
+        out.append(d)
+    return out

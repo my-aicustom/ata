@@ -9,3 +9,7 @@ core/ata_v2.db
 core/.active_instance
 .vercel/
 .vercel
+.ata-v3-backup*
+temp_patch_v3/
+core/data/
+*.db

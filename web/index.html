@@ -1,447 +1,50 @@
 <!doctype html>
 <html lang="id">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ATA v2 · Light Thesis Studio</title>
-  <link rel="icon" type="image/png" href="/assets/favicon.png">
-  <link rel="apple-touch-icon" href="/assets/icon-192.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f7f6f2">
+  <title>ATA · Thesis OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/studio.css">
 </head>
 <body>
-  <div class="app" id="app">
-    <!-- SIDEBAR (LEFT) -->
-    <aside class="sidebar" aria-label="Navigasi utama">
-      <div class="sidebar-header">
-        <div class="brand-wrapper">
-          <img src="/assets/icon_transparent.png" alt="ATA Logo" class="brand-logo-img">
-          <div class="brand-text">
-            <strong>ATA <span>v2</span></strong>
-            <p>Advanced Thesis Architect</p>
-          </div>
+<div class="app" id="app">
+  <aside class="rail" aria-label="Navigasi proyek"><div class="brand">A<span>TA</span></div><button class="icon-btn" id="newProject" title="Tesis baru">＋</button><div class="rail-spacer"></div><button class="icon-btn" id="toggleWorkbench" title="Workbench">☷</button></aside>
+  <main class="main">
+    <header class="topbar"><div class="project-switcher"><span class="eyebrow">PROYEK</span><select id="projectSelect"><option>Belum ada tesis</option></select></div><div class="top-status" id="topStatus"><span class="dot"></span> ATA siap</div></header>
+    <section class="thread" id="thread" aria-live="polite">
+      <div class="welcome" id="welcome"><div class="intro-mark">ATA · Thesis OS</div><h1>Posisi tesis Anda sekarang?</h1><p class="lede">Pilih kondisi paling dekat. ATA menentukan langkah berikutnya, agent yang dibutuhkan, dan bukti yang harus disiapkan.</p>
+        <div class="stage-grid" id="stageGrid">
+          <button data-stage="start"><span>01</span><strong>Mulai dari nol</strong><small>Belum ada judul yang mantap</small></button><button data-stage="title"><span>02</span><strong>Sudah punya judul</strong><small>Tajamkan RQ dan proposal</small></button><button data-stage="proposal"><span>03</span><strong>Sedang proposal</strong><small>Literatur, metode, instrumen</small></button><button data-stage="data"><span>04</span><strong>Sedang ambil data</strong><small>QC dan analisis sesuai rencana</small></button><button data-stage="writing"><span>05</span><strong>Sedang menulis</strong><small>Bab IV–V dan konsistensi</small></button><button data-stage="revision"><span>06</span><strong>Sedang revisi</strong><small>Arahan pembimbing → patch</small></button><button data-stage="defense"><span>07</span><strong>Mau sidang</strong><small>Latihan dari titik terlemah</small></button>
         </div>
-        <button id="collapse" class="sidebar-toggle-btn" aria-label="Buka/tutup navigasi" title="Buka/tutup navigasi">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
-        </button>
+        <section class="next-card" id="nextAction" hidden><div><span class="eyebrow">NEXT BEST ACTION</span><h2 id="nextTitle">—</h2><p id="nextReason">—</p></div><button id="runNext">Kerjakan sekarang →</button></section>
       </div>
-
-      <div class="sidebar-body">
-        <div class="workspace-box">
-          <div class="workspace-header">
-            <span class="workspace-caption">WORKSPACE TESIS</span>
-            <button id="openNewThesisBtn" class="workspace-add-btn" aria-label="Buat Tesis Baru" title="Inisialisasi Tesis Baru">+</button>
-          </div>
-          <select id="instanceSelect" class="workspace-select" aria-label="Pilih Tesis Aktif"></select>
-        </div>
-
-        <div class="sidebar-meta-row">
-          <span class="badge-chip" id="study-program-badge">S2 · LKPP</span>
-          <span class="badge-chip amber" id="must-counter">MUST ready</span>
-        </div>
-
-        <button id="newChat" class="newchat-btn" title="Mulai sesi bimbingan baru">
-          <span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-            Percakapan Baru
-          </span>
-          <kbd>⌘K</kbd>
-        </button>
-
-        <div class="section-label">
-          <span>KNOWLEDGE</span>
-          <span id="fileCount" class="badge-count">-</span>
-        </div>
-        <nav id="knowledge" class="nav-group" aria-label="Knowledge"></nav>
-      </div>
-
-      <div class="sidebar-footer">
-        <span class="user-avatar">M</span>
-        <div class="user-info">
-          <strong>Ruang tesis mahasiswa</strong>
-          <p>Komunikasi Korporat · LKPP</p>
-        </div>
-        <span class="pulse-dot" title="Sistem Aktif"></span>
-      </div>
-    </aside>
-
-    <!-- CENTER STUDIO (MAIN) -->
-    <main class="studio">
-      <header class="topbar">
-        <div class="topbar-left">
-          <span class="crumb-root">Tesis LKPP</span>
-          <span class="crumb-sep">/</span>
-          <strong id="roleTitle" class="crumb-current">Ledger</strong>
-        </div>
-        <div class="topbar-right">
-          <span id="active-model-badge" class="model-pill">
-            <span class="pulse-dot"></span>OpenRouter · Free Tier
-          </span>
-          <button id="drawerToggle" class="drawer-toggle-btn" aria-label="Buka workbench" title="Buka panel workbench (Ctrl+J)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m11 9-3 3 3 3"/></svg>
-            <span>Buka Workbench</span>
-          </button>
-        </div>
-      </header>
-
-      <div id="thesisPipeline" class="pipeline-stepper" aria-label="Alur Tahapan Tesis">
-        <button class="step-btn active" data-phase="1" title="Fase 1: Persiapan & Scoping">
-          <span class="step-num">1</span>
-          <span class="step-label">Persiapan</span>
-          <span class="step-gate">G1</span>
-        </button>
-        <button class="step-btn" data-phase="2" title="Fase 2: Tinjauan Pustaka & Sintesis">
-          <span class="step-num">2</span>
-          <span class="step-label">Literatur</span>
-          <span class="step-gate">G2</span>
-        </button>
-        <button class="step-btn" data-phase="3" title="Fase 3: Kerangka Teori & Proposal">
-          <span class="step-num">3</span>
-          <span class="step-label">Proposal</span>
-          <span class="step-gate">G3</span>
-        </button>
-        <button class="step-btn" data-phase="4" title="Fase 4: Pengumpulan Data & Lab">
-          <span class="step-num">4</span>
-          <span class="step-label">Data &amp; Lab</span>
-          <span class="step-gate">G4</span>
-        </button>
-        <button class="step-btn" data-phase="5" title="Fase 5: Analisis Hasil & Temuan">
-          <span class="step-num">5</span>
-          <span class="step-label">Hasil Bab IV</span>
-        </button>
-        <button class="step-btn" data-phase="6" title="Fase 6: Penutup & Finalisasi Draf">
-          <span class="step-num">6</span>
-          <span class="step-label">Finalisasi</span>
-          <span class="step-gate">G5</span>
-        </button>
-        <button class="step-btn" data-phase="7" title="Fase 7: Ujian Sidang & Pertahanan">
-          <span class="step-num">7</span>
-          <span class="step-label">Sidang</span>
-          <span class="step-gate">G6</span>
-        </button>
-      </div>
-
-      <div id="thread" class="thread" aria-live="polite">
-        <section id="welcome" class="welcome-container">
-          <div class="welcome-badge">
-            <img src="/assets/icon_transparent.png" class="welcome-badge-icon" alt="">
-            <span>ADVANCED THESIS ARCHITECT</span>
-          </div>
-          <h1 class="welcome-headline">Argumen yang bening.<br><em>Bukti yang siap diuji.</em></h1>
-          <p class="welcome-sub">Ruang kerja tesis yang ringan untuk membaca, mencatat, menguji klaim, dan merapikan arahan bimbingan tanpa lelah mata.</p>
-
-          <div class="suggestions-grid">
-            <button class="suggestion-card" data-prompt="Catat dan rapikan arahan Bu Henni dari transkrip bimbingan berikut.">
-              <span class="suggestion-cat">01 / TRANSKRIP BIMBINGAN</span>
-              <span class="suggestion-text">Catat Arahan Bu Henni</span>
-              <span class="suggestion-arrow">→</span>
-            </button>
-            <button class="suggestion-card" data-prompt="Uji rumusan masalah tesis saya agar lebih tajam, feasible, dan siap disetujui dosen.">
-              <span class="suggestion-cat">02 / RUMUSAN MASALAH</span>
-              <span class="suggestion-text">Uji Rumusan Masalah</span>
-              <span class="suggestion-arrow">→</span>
-            </button>
-            <button class="suggestion-card" data-prompt="Ringkas paper van Riel dan Fombrun menjadi satu halaman untuk kebutuhan tesis komunikasi korporat.">
-              <span class="suggestion-cat">03 / LITERATUR INTI</span>
-              <span class="suggestion-text">Ringkas Paper van Riel &amp; Fombrun</span>
-              <span class="suggestion-arrow">→</span>
-            </button>
-            <button class="suggestion-card" data-prompt="Scan paragraf ini dan tandai kata klise sebelum dosen membaca draf saya.">
-              <span class="suggestion-cat">04 / ANTI-SLOP</span>
-              <span class="suggestion-text">Scan Kata Klise</span>
-              <span class="suggestion-arrow">→</span>
-            </button>
-          </div>
-          <div class="welcome-note">Mulai dari catatan mentah. Pulang dengan argumen yang rapi.</div>
-        </section>
-      </div>
-
-      <div class="composer-dock">
-        <div id="attachmentPreviewContainer" class="attachment-previews" hidden></div>
-        <div id="attachmentLabel" class="attachment-label"></div>
-        <form id="chatForm" class="composer-card">
-          <textarea id="prompt" rows="1" aria-label="Pesan" placeholder="Tulis poin, pertanyaan, atau draf tesis Anda..." required></textarea>
-          <div class="composer-bar">
-            <div class="composer-bar-left">
-              <button type="button" id="attach" class="attach-btn" aria-label="Lampirkan berkas" title="Lampirkan berkas teks, dokumen DOCX/PDF, gambar arsitektur, atau rekaman audio">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              </button>
-              <input id="attachment" type="file" accept=".txt,.md,.pdf,.docx,.doc,.pptx,.xlsx,.csv,image/*,audio/*" hidden>
-              <select id="roleSelect" class="role-pill-select" aria-label="Pilih peran"></select>
-              <span id="modelStatus" class="model-status-text">
-                <span class="pulse-dot"></span>OpenRouter · Free Tier
-              </span>
-            </div>
-            <button id="send" type="submit" class="send-action-btn" aria-label="Kirim pesan" title="Kirim (Enter)">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-            </button>
-          </div>
-        </form>
-        <div class="composer-hints">
-          <span>AI membantu. Mahasiswa tetap pemilik argumen.</span>
-          <span>Enter kirim · Shift + Enter baris baru</span>
-        </div>
-      </div>
-    </main>
-
-    <!-- THESIS WORKBENCH (RIGHT) -->
-    <aside id="drawer" class="drawer" aria-label="Thesis workbench">
-      <div class="drawer-header">
-        <div class="drawer-title-wrap">
-          <span class="drawer-eyebrow">THESIS WORKBENCH</span>
-          <h2 class="drawer-headline">Jejak bukti</h2>
-        </div>
-        <div class="drawer-actions">
-          <button id="refresh" class="drawer-action-btn" aria-label="Muat ulang workbench" title="Segarkan data">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
-          </button>
-          <button id="drawerClose" class="drawer-action-btn" aria-label="Sembunyikan workbench" title="Sembunyikan workbench (Ctrl+J)">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg>
-          </button>
-        </div>
-      </div>
-
-      <div class="drawer-tabs" role="tablist">
-        <button data-tab="ledger" class="drawer-tab-btn" role="tab" aria-selected="true">Ledger</button>
-        <button data-tab="gates" class="drawer-tab-btn" role="tab">G1-G6</button>
-        <button data-tab="claims" class="drawer-tab-btn" role="tab">Claims</button>
-        <button data-tab="citation" class="drawer-tab-btn" role="tab">Citation</button>
-        <button data-tab="slop" class="drawer-tab-btn" role="tab">Anti-slop</button>
-      </div>
-
-      <div class="drawer-content">
-        <section id="panel-ledger" class="panel">
-          <div class="section-heading">
-            <h3>Arahan Bu Henni</h3>
-            <span class="badge-chip live-chip">LIVE</span>
-          </div>
-          <p class="panel-help">Setiap revisi punya arahan. Setiap arahan punya bukti.</p>
-          <div id="directives"></div>
-        </section>
-
-        <section id="panel-gates" class="panel" hidden>
-          <div class="section-heading">
-            <h3>Enam Gerbang Kualitas</h3>
-            <span class="badge-chip">GATEWAY</span>
-          </div>
-          <p class="panel-help">Dihitung dari bukti tersimpan. Data kosong belum lolos.</p>
-          <div id="gates"></div>
-          <details class="assessment-details">
-            <summary>Masukkan hasil penilaian mandiri</summary>
-            <p class="panel-help">FINER, statistik, similarity, atau skor simulasi dari penilaian nyata.</p>
-            <select id="assessmentGate" class="form-select">
-              <option>G1</option>
-              <option>G4</option>
-              <option>G5</option>
-              <option>G6</option>
-            </select>
-            <textarea id="assessment" class="form-textarea" rows="6" aria-label="JSON hasil penilaian" placeholder='{"finer_scores":{"Feasible":3,"Interesting":3,"Novel":3,"Ethical":3,"Relevant":3}}'></textarea>
-            <button id="saveAssessment" class="btn-primary">Simpan penilaian</button>
-            <pre id="assessmentResult" class="code-result"></pre>
-          </details>
-        </section>
-
-        <section id="panel-claims" class="panel" hidden>
-          <div class="section-heading">
-            <h3>Claim-Evidence Checker</h3>
-          </div>
-          <p class="panel-help">Gunakan (M), (M+AI), (AI), [Brief: ID, hal. X], atau [Ledger: ID]. Penanda rujukan belum membuktikan isi sumber.</p>
-          <textarea id="claimsText" class="form-textarea" rows="8" placeholder="Tempel draf mahasiswa untuk diperiksa klaimnya..." aria-label="Draf klaim"></textarea>
-          <button id="scanClaims" class="btn-primary">Scan kalimat klaim →</button>
-          <div id="claimsResult" class="claims-result-box"></div>
-        </section>
-
-        <section id="panel-citation" class="panel" hidden>
-          <div class="section-heading">
-            <h3>Citation &amp; Quote Lab</h3>
-          </div>
-          <p class="panel-help">Verifikasi DOI melalui Crossref dan OpenAlex secara deterministik.</p>
-          <input id="doi" class="form-input" placeholder="Contoh: 10.1080/1553118X.2018.1452240" aria-label="DOI">
-          <button id="verifyDoi" class="btn-primary">Verifikasi DOI</button>
-          <pre id="doiResult" class="code-result"></pre>
-          <hr class="panel-divider">
-          <h3>String-match kutipan</h3>
-          <p class="panel-help">Tempel teks hasil ekstraksi PDF beserta kutipan asli. Pencocokan menggunakan algoritma exact &amp; sliding window.</p>
-          <textarea id="quote" class="form-textarea" rows="3" placeholder="Kutipan langsung yang Anda tulis" aria-label="Kutipan"></textarea>
-          <textarea id="source" class="form-textarea" rows="5" placeholder="Teks sumber asli dari PDF paper" aria-label="Teks sumber"></textarea>
-          <button id="verifyQuote" class="btn-primary">Cocokkan keaslian kutipan</button>
-          <pre id="quoteResult" class="code-result"></pre>
-        </section>
-
-        <section id="panel-slop" class="panel" hidden>
-          <div class="section-heading">
-            <h3>Anti-Slop Audit</h3>
-          </div>
-          <p class="panel-help">Periksa 18 frasa klise terlarang LKPP. Utamakan fenomena dan data konkret.</p>
-          <textarea id="slopText" class="form-textarea" rows="8" placeholder="Tempel paragraf draf untuk diaudit kebersihan bahasanya..." aria-label="Draf anti-slop"></textarea>
-          <button id="scanSlop" class="btn-primary">Audit bahasa klise →</button>
-          <pre id="slopResult" class="code-result"></pre>
-        </section>
-
-        <section id="panel-knowledge" class="panel" hidden>
-          <div class="section-heading">
-            <h3 id="knowledgeTitle">Knowledge Document</h3>
-          </div>
-          <pre id="knowledgeContent" class="code-result knowledge-viewer"></pre>
-        </section>
-      </div>
-
-      <div class="drawer-footer">
-        <span>Bukti dulu, kesimpulan kemudian.</span>
-      </div>
-    </aside>
-  </div>
-
-  <div class="compat-anchors" aria-hidden="true" hidden>
-    <nav id="roles"></nav>
-    <textarea id="user-input"></textarea>
-    <div id="chat-box"></div>
-    <select id="role-select"></select>
-    <table><tbody id="ledger-table-body"></tbody></table>
-    <table><tbody id="consistency-table-body"></tbody></table>
-    <pre id="citation-result"></pre>
-    <pre id="quote-result"></pre>
-    <pre id="slop-result"></pre>
-  </div>
-
-  <div id="toast" role="status" hidden></div>
-  
-  <!-- MODAL: INISIALISASI TESIS BARU (UNIVERSAL S2 MULTI-DISCIPLINE) -->
-  <div id="newThesisModal" class="modal-backdrop" aria-hidden="true" hidden>
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-      <div class="modal-header">
-        <div class="modal-header-icon">
-          <img src="/assets/icon_transparent.png" alt="ATA" width="28" height="28">
-        </div>
-        <div class="modal-header-text">
-          <h2 id="modalTitle">Inisialisasi Tesis Baru</h2>
-          <p>Konfigurasi ruang kerja riset untuk mahasiswa S2 semua program studi di Indonesia</p>
-        </div>
-        <button type="button" id="closeNewThesisBtn" class="modal-close-btn" aria-label="Tutup dialog">&times;</button>
-      </div>
-
-      <form id="newThesisForm" class="modal-form">
-        <div class="form-row form-grid-2">
-          <div class="form-group">
-            <label for="newStudentName">Nama Mahasiswa <span class="req">*</span></label>
-            <input type="text" id="newStudentName" name="student" placeholder="Contoh: Wawan Priyanto, S.T." required>
-          </div>
-          <div class="form-group">
-            <label for="newCampus">Perguruan Tinggi / Kampus <span class="req">*</span></label>
-            <input type="text" id="newCampus" name="campus" placeholder="Contoh: Telkom University / UI / ITB / Undip" required>
-          </div>
-        </div>
-
-        <div class="form-row form-grid-2">
-          <div class="form-group">
-            <label for="newProgram">Jenjang &amp; Program Studi <span class="req">*</span></label>
-            <input type="text" id="newProgram" name="program" placeholder="Contoh: Magister Informatika (S2)" required>
-          </div>
-          <div class="form-group">
-            <label for="newAdvisor">Dosen Pembimbing Utama <span class="req">*</span></label>
-            <input type="text" id="newAdvisor" name="advisor" placeholder="Contoh: Dr. Ir. Dosen Pembimbing, M.T." required>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="newTopic">Rencana Topik / Judul Penelitian Tesis <span class="req">*</span></label>
-          <textarea id="newTopic" name="topic" rows="2" placeholder="Contoh: Analisis Kinerja Forensik Digital Terdistribusi Menggunakan Velociraptor pada Lingkungan Cloud Multi-Tenant" required></textarea>
-        </div>
-
-        <div class="form-row form-grid-2">
-          <div class="form-group">
-            <label for="newDomain">Bidang Keilmuan (Domain Profile)</label>
-            <select id="newDomain" name="domain">
-              <option value="umum">Umum / Lintas Disiplin</option>
-              <option value="forensik-digital">Informatika, Siber &amp; Forensik Digital (Telkom)</option>
-              <option value="komunikasi-korporat">Komunikasi Korporat &amp; Kehumasan (LKPP)</option>
-              <option value="manajemen-bisnis">Manajemen, Bisnis &amp; Keuangan</option>
-              <option value="hukum-kebijakan">Hukum &amp; Kebijakan Publik</option>
-              <option value="pendidikan-teknologi">Pendidikan &amp; Teknologi Pembelajaran</option>
-              <option value="kesehatan-masyarakat">Kesehatan Masyarakat &amp; Kedokteran</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="newMethod">Paket Metodologi Utama</label>
-            <select id="newMethod" name="method">
-              <option value="system_experiment">Eksperimen Lab Sistem / DSR (Design Science Research)</option>
-              <option value="survey">Survei Kuantitatif SEM-PLS (SmartPLS / WarpPLS)</option>
-              <option value="case_study">Kualitatif Studi Kasus &amp; Analisis Tematik</option>
-              <option value="mixed_methods">Metode Campuran (Mixed Methods)</option>
-              <option value="slr">Systematic Literature Review (PRISMA)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" id="cancelNewThesisBtn" class="modal-btn-cancel">Batal</button>
-          <button type="submit" id="submitNewThesisBtn" class="modal-btn-primary">
-            <span>✨ Buat Workspace Tesis</span>
-          </button>
-        </div>
-      </form>
+    </section>
+    <section class="composer-wrap"><div class="attachments" id="attachments" hidden></div><form class="composer" id="chatForm"><textarea id="prompt" rows="1" placeholder="Tulis masalah, tempel revisi dosen, atau minta ATA melanjutkan tesis…"></textarea><div class="composer-row"><div class="composer-left"><button type="button" class="mini-btn" id="attachBtn">＋ File / Voice / Foto</button><input id="fileInput" type="file" hidden accept=".txt,.md,.csv,.json,.pdf,.docx,image/*,audio/*"><span class="goal-pill" id="goalPill">Mode · Pendamping tesis</span></div><button class="send" id="send" type="submit">↑</button></div></form><div class="fineprint">AI membantu struktur, bukti, dan latihan. Mahasiswa tetap pemilik argumen.</div></section>
+  </main>
+  <aside class="workbench" id="workbench" aria-label="Thesis workbench">
+    <header class="wb-head"><div><span class="eyebrow">THESIS WORKBENCH</span><h2>Kontrol kualitas</h2></div><button id="closeWorkbench" class="icon-btn">×</button></header>
+    <nav class="wb-tabs"><button data-tab="overview" aria-selected="true">Ringkas</button><button data-tab="directives">Arahan Pembimbing</button><button data-tab="sources">Bukti & Literatur</button><button data-tab="artifacts">Naskah</button><button data-tab="gates">Gate</button><button data-tab="defense">Sidang</button></nav>
+    <div class="wb-body">
+      <section class="panel" id="panel-overview"><div class="metric-card"><span>Progress</span><strong id="progressValue">0%</strong><small id="progressText">Belum ada data gate</small></div><div class="panel-block"><span class="eyebrow">PRIORITAS</span><h3 id="wbNextTitle">Buat tesis baru</h3><p id="wbNextReason">Isi profil singkat agar ATA bisa menentukan jalur tercepat.</p></div><div class="storage-warning" id="storageWarning" hidden></div></section>
+      <section class="panel" id="panel-directives" hidden>
+        <div class="panel-title"><div><h3>Arahan Pembimbing</h3><p>Voice note/foto revisi dapat dilampirkan di chat; hasilnya masuk alur revisi.</p></div></div><div id="directiveList" class="stack"></div>
+        <details class="toolbox"><summary>Import arahan terstruktur</summary><textarea id="directiveJson" placeholder='[{"id":"DP1-01","directive":"...","priority":"MUST","status":"open"}]'></textarea><button id="importDirectives">Import</button></details>
+        <div class="tool-section"><span class="eyebrow">Revision Engine</span><h4>Usulan revisi before / after</h4><label>Arahan<select id="revisionDirective"></select></label><label>Target naskah<select id="revisionArtifact"></select></label><button class="primary full" id="proposeRevision">Buat usulan revisi</button><div id="revisionList" class="stack"></div></div>
+      </section>
+      <section class="panel" id="panel-sources" hidden>
+        <div class="panel-title"><div><h3>Bukti & Literatur</h3><p>Kandidat dicari dari API akademik; verifikasi DOI dan locator dilakukan terpisah.</p></div></div><form id="sourceSearch" class="searchline"><input id="sourceQuery" placeholder="Cari teori, topik, atau keyword…"><button>Cari</button></form><div id="sourceResults" class="stack"></div><h4 class="subhead">Tersimpan</h4><div id="savedSources" class="stack"></div>
+        <div class="tool-section"><span class="eyebrow">CLAIM → EVIDENCE</span><textarea id="evidenceText" class="wide-text" placeholder="Tempel paragraf dengan tag [Brief: src-id, hal. 12]..."></textarea><button id="resolveEvidence">Periksa rantai bukti</button><pre id="evidenceResult" class="resultbox"></pre></div>
+      </section>
+      <section class="panel" id="panel-artifacts" hidden><div class="panel-title row-title"><div><h3>Naskah</h3><p>Bab disimpan sebagai versi dan revision accept selalu membuat versi baru.</p></div><button id="exportDocx" class="ghost small">Export DOCX</button></div><div class="template-row"><button id="chooseDocxTemplate" class="ghost small">Template kampus</button><input id="docxTemplateInput" type="file" accept=".docx" hidden><span id="docxTemplateName" class="muted">Tanpa template khusus</span></div><div id="artifactList" class="stack"></div></section>
+      <section class="panel" id="panel-gates" hidden><div class="panel-title"><div><h3>Quality Gate</h3><p>Ambang G4 mengikuti metode aktif, bukan dipaksa menjadi survei.</p></div></div><div id="gateList" class="stack"></div></section>
+      <section class="panel" id="panel-defense" hidden>
+        <div class="panel-title"><div><h3>Sidang</h3><p>Naskah terbaru menjadi konteks latihan; histori skor menunjukkan titik lemah.</p></div></div><button class="primary full" id="startDefense">Mulai simulasi penguji</button><button class="ghost full gap-top" id="weaknessMap">Buat weakness map dari naskah</button><div id="weaknessResult" class="resultbox muted"></div>
+        <div class="tool-section"><span class="eyebrow">Defense History</span><label>Pertanyaan penguji<textarea id="defenseQuestion" class="wide-text"></textarea></label><label>Jawaban saya<textarea id="defenseAnswer" class="wide-text"></textarea></label><button id="evaluateDefense">Nilai jawaban 1–4</button><div id="defenseResult" class="resultbox"></div><div id="defenseHistory" class="stack"></div></div>
+      </section>
     </div>
-  </div>
-
-    <!-- MODAL: PENGATURAN API KEY OPENROUTER -->
-  <div id="apiKeyModal" class="modal-backdrop" aria-hidden="true" hidden>
-    <div class="modal-card" style="max-width: 480px;" role="dialog" aria-modal="true" aria-labelledby="apiKeyModalTitle">
-      <div class="modal-header">
-        <div class="modal-header-icon" style="background: var(--blue-bg); border-color: var(--blue-border); color: var(--blue);">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-1-1l-3 3m5 5l-2 2m-1-1l-3 3M3 21l9-9m0 0l3 3m-3-3l-3-3"/></svg>
-        </div>
-        <div class="modal-header-text">
-          <h2 id="apiKeyModalTitle">Kunci API Model</h2>
-          <p>Koneksi model penalaran tesis (OpenRouter Free / Premium)</p>
-        </div>
-        <button type="button" id="closeApiKeyBtn" class="modal-close-btn" aria-label="Tutup dialog">&times;</button>
-      </div>
-
-      <form id="apiKeyForm" class="modal-form">
-        <div class="form-group">
-          <label for="customApiKeyInput">OpenRouter API Key (Opsional)</label>
-          <input type="password" id="customApiKeyInput" placeholder="sk-or-v1-..." autocomplete="off">
-          <p style="font-size: 11px; color: var(--text-soft); line-height: 1.4; margin-top: 4px;">
-            Kosongkan jika ingin memakai kunci default server. Masukkan kunci pribadi jika kuota server sedang padat. Kunci tersimpan privat di peramban Anda.
-          </p>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" id="clearApiKeyBtn" class="modal-btn-cancel" style="color: var(--coral);">Hapus Kunci</button>
-          <button type="submit" id="saveApiKeyBtn" class="modal-btn-primary">Simpan Kunci</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <script src="/studio.js"></script>
-  <script>
-  (() => {
-    const byId = id => document.getElementById(id);
-    const click = id => byId(id)?.click();
-    window.sendMessage = window.sendMessage || (() => byId('chatForm')?.requestSubmit());
-    window.loadDirectives = window.loadDirectives || (() => window.loadLedger?.());
-    window.toggleStatus = window.toggleStatus || (() => undefined);
-    window.loadConsistency = window.loadConsistency || (() => window.loadGates?.());
-    window.switchTab = window.switchTab || (name => window.tab?.(name));
-    window.runCitationVerify = window.runCitationVerify || (() => click('verifyDoi'));
-    window.runCitationTestPreset = window.runCitationTestPreset || (() => {
-      const doi = byId('doi');
-      if (doi && !doi.value) doi.value = '10.1080/1553118X.2018.1452240';
-      click('verifyDoi');
-    });
-    window.runQuoteVerify = window.runQuoteVerify || (() => click('verifyQuote'));
-    window.runSlopScan = window.runSlopScan || (() => click('scanSlop'));
-    const source = byId('modelStatus');
-    const target = byId('active-model-badge');
-    if (source && target) {
-      const sync = () => { target.innerHTML = `<span class="pulse-dot"></span>${source.textContent.replace(/^[•·\s]+/, '').trim() || 'OpenRouter'}`; };
-      sync();
-      new MutationObserver(sync).observe(source, { childList:true, subtree:true, characterData:true });
-    }
-  })();
-  </script>
-</body>
-</html>
+  </aside>
+</div>
+<div class="modal" id="projectModal" hidden aria-hidden="true"><div class="modal-card"><div class="modal-head"><div><span class="eyebrow">TESIS BARU</span><h2>Beritahu ATA konteks minimum.</h2></div><button id="closeProjectModal" class="icon-btn">×</button></div><form id="projectForm"><div class="grid2"><label>Nama mahasiswa<input id="pStudent" required></label><label>Program / Prodi<input id="pProgram" required placeholder="S2 Ilmu Komunikasi"></label></div><label>Topik sementara<textarea id="pTopic" required placeholder="Belum harus judul final."></textarea></label><div class="grid2"><label>Domain<select id="pDomain"><option value="umum">Umum</option><option value="komunikasi">Komunikasi</option><option value="informatika">Informatika</option></select></label><label>Metode awal<select id="pMethod"><option value="survey">Survei</option><option value="interview">Wawancara</option><option value="content-analysis">Content analysis</option><option value="system-experiment">Eksperimen sistem</option><option value="dsr">DSR / Prototype</option><option value="umum">Belum ditentukan</option></select></label></div><div class="grid2"><label>Pembimbing<input id="pAdvisor"></label><label>Target selesai<input id="pDeadline" placeholder="mis. 4 bulan"></label></div><div class="modal-actions"><button type="button" class="ghost" id="cancelProject">Batal</button><button class="primary">Buat ruang tesis</button></div></form></div></div>
+<div class="toast" id="toast" hidden></div><script src="/studio.js"></script>
+</body></html>

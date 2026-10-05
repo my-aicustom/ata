@@ -2,14 +2,14 @@
   "version": 2,
   "functions": {
     "api/index.py": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "web/**"
     }
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.py?__path=/api/$1" },
     { "source": "/api", "destination": "/api/index.py?__path=/api" },
     { "source": "/", "destination": "/web/index.html" },
-    { "source": "/assets/(.*)", "destination": "/web/assets/$1" },
     { "source": "/studio.css", "destination": "/web/studio.css" },
     { "source": "/studio.js", "destination": "/web/studio.js" },
     { "source": "/(.*)", "destination": "/web/$1" }
