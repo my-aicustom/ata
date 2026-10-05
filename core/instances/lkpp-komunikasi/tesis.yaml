@@ -1,0 +1,18 @@
+# Lapis 4 — Thesis Instance. Isi dari v2 (Instruksi Project global + studi kasus Bu Henni 1).
+kode: lkpp-komunikasi
+mahasiswa: "Tete (panggilan di transkrip; lengkapi nama)"
+jenjang_prodi: "S2 Ilmu Komunikasi, konsentrasi Komunikasi Korporat"
+persona: "pegawai Humas LKPP yang kuliah sambil bekerja penuh waktu"
+jam_per_minggu: 8
+pembimbing: "Bu Henni"
+kode_sesi: "BH"
+topik: "komunikasi kelembagaan LKPP untuk membangun kepercayaan publik"
+domain: komunikasi
+method_packs: [survey, interview]   # interview hanya jika mixed methods disetujui
+
+status: aktif
+tenggat: "[isi; target 3–6 bulan dari 2026-09-30]"
+prodi:                              # [isi] buat Prodi Profile dari pedoman kampus mahasiswa
+bahasa_tesis: Indonesia
+lembaga_kasus: "LKPP"
+peneliti_orang_dalam: true

@@ -1,0 +1,11 @@
+.env.local
+__pycache__/
+*.pyc
+server-check*.log
+tests/tmp*/server-final*.log
+scratch/
+temp_uploads/
+core/ata_v2.db
+core/.active_instance
+.vercel/
+.vercel

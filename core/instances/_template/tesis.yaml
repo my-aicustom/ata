@@ -1,0 +1,23 @@
+# Lapis 4 — Thesis Instance. [BARU 4-LAPIS] [BARU MULTI-USER]
+# Diisi untuk setiap tesis baru, lewat peran mulai-di-sini (core/onboarding.md).
+# Nilai di sini mengisi bagian yang berbeda per tesis. Nilai "[isi...]" berarti belum diisi.
+
+# --- wajib ---
+kode: contoh-kode
+mahasiswa: "[isi]"
+jenjang_prodi: "[isi, mis. S2 Magister Manajemen, konsentrasi Keuangan]"
+persona: "[isi, mis. karyawan bank yang kuliah sambil bekerja / mahasiswa reguler penuh waktu]"
+jam_per_minggu: 8
+pembimbing: "[isi]"
+kode_sesi: "[isi 2–3 huruf inisial pembimbing, mis. AS]"
+topik: "[isi satu kalimat]"
+domain: "[isi nama file di domain/ tanpa .md]"
+method_packs: []            # nama file di method/ tanpa .md, mis. [survey, interview]
+
+# --- opsional (nilai bawaan di scripts/build_project.py DEFAULTS) ---
+status: draf                # draf | aktif | selesai
+tenggat: "[isi YYYY-MM-DD]"
+prodi:                      # nama file di prodi/ tanpa .md; kosongkan jika belum ada Prodi Profile
+bahasa_tesis: Indonesia     # Indonesia | Inggris
+lembaga_kasus:              # organisasi tempat data diambil / pengguna hasil penelitian; kosongkan jika tidak ada
+peneliti_orang_dalam: false # true jika mahasiswa bekerja di lembaga_kasus

@@ -1,0 +1,23 @@
+---
+type: community
+members: 3
+---
+
+# Community 44
+
+**Members:** 3 nodes
+
+## Members
+- [[TC()]] - code - web/vendor/tailwind-3.4.17.js
+- [[Ue()]] - code - web/vendor/tailwind-3.4.17.js
+- [[bo()]] - code - web/vendor/tailwind-3.4.17.js
+
+## Live Query (requires Dataview plugin)
+
+```dataview
+TABLE source_file, type FROM #community/Community_44
+SORT file.name ASC
+```
+
+## Connections to other communities
+- 3 edges to [[_COMMUNITY_Community 1]]

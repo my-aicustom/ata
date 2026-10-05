@@ -1,0 +1,18 @@
+# Lapis 4 — Thesis Instance S2 Informatika Telkom University
+kode: forensik-informatika
+mahasiswa: "Wawan (S2 Telkom University)"
+jenjang_prodi: "S2 Magister Informatika - Forensik Digital"
+persona: "Praktisi & mahasiswa magister yang meneliti investigasi forensik digital terdistribusi"
+jam_per_minggu: 10
+pembimbing: "Dosen Pembimbing Forensik Digital Telkom"
+kode_sesi: "DP"
+topik: "Akuisisi Forensik Digital Terdistribusi Menggunakan Velociraptor pada Arsitektur Multi-Node"
+domain: informatika
+method_packs: [system-experiment, dsr]
+
+status: aktif
+tenggat: "Semester Genap 2026/2027"
+bahasa_tesis: Indonesia
+lembaga_kasus: "Telkom University / Pusdatin"
+peneliti_orang_dalam: true
+

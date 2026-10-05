@@ -1,0 +1,19 @@
+---
+source_file: "web/vendor/tailwind-3.4.17.js"
+type: "code"
+community: "Community 11"
+location: "L20"
+tags:
+  - graphify/code
+  - graphify/EXTRACTED
+  - community/Community_11
+---
+
+# append()
+
+## Connections
+- [[markDirty()]] - `calls` [EXTRACTED]
+- [[normalize()]] - `calls` [EXTRACTED]
+- [[push()]] - `calls` [EXTRACTED]
+
+#graphify/code #graphify/EXTRACTED #community/Community_11
