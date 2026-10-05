@@ -21,7 +21,22 @@ _SCHEMA_VERSION = 3
 
 
 def _backend() -> str:
-    return 'postgres' if os.getenv('DATABASE_URL', '').startswith(('postgres://','postgresql://')) else 'sqlite'
+    url = os.getenv('DATABASE_URL', '')
+    if not url:
+        data_dir = os.getenv('ATA_DATA_DIR', '')
+        if not os.getenv('ATA_TESTING') and not ('temp' in data_dir.lower() or 'tmp' in data_dir.lower()):
+            try:
+                from pathlib import Path
+                cfg = Path(__file__).resolve().parent.parent / '.env.local'
+                if cfg.is_file():
+                    for line in cfg.read_text(encoding='utf-8').splitlines():
+                        if line.startswith('DATABASE_URL='):
+                            url = line.split('=', 1)[1].strip()
+                            os.environ['DATABASE_URL'] = url
+                            break
+            except Exception:
+                pass
+    return 'postgres' if url.startswith(('postgres://','postgresql://')) else 'sqlite'
 
 
 def _data_dir() -> Path:
