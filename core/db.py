@@ -66,8 +66,7 @@ class _PGConnection:
     def execute(self, sql, params=()):
         return _PGResult(self._conn.execute(_translate_qmark(sql), params))
     def executescript(self, script):
-        for statement in [x.strip() for x in script.split(';') if x.strip()]:
-            self._conn.execute(statement)
+        self._conn.execute(script)
     def __enter__(self): return self
     def __exit__(self, exc_type, exc, tb):
         try:
@@ -102,7 +101,11 @@ def get_connection(db_path: Optional[str] = None):
     return _SQLiteConnection(db_path or str(_db_path()))
 
 
+_db_initialized = False
+
 def reset_for_tests() -> None:
+    global _db_initialized
+    _db_initialized = False
     if _backend() != 'sqlite':
         return
     path = _db_path()
@@ -180,10 +183,15 @@ CREATE TABLE IF NOT EXISTS ai_usage_log (
 """
 
 
-def init_db(db_path: Optional[str] = None) -> None:
+def init_db(db_path: Optional[str] = None, force: bool = False) -> None:
+    global _db_initialized
+    if _db_initialized and not force and db_path is None:
+        return
     with get_connection(db_path) as conn:
         conn.executescript(_SCHEMA)
         conn.execute("INSERT INTO meta(key,value) VALUES('schema_version',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (str(_SCHEMA_VERSION),))
+    if db_path is None:
+        _db_initialized = True
 
 
 def _now() -> str: return datetime.now(timezone.utc).isoformat()
@@ -191,7 +199,7 @@ def _id(prefix: str) -> str: return prefix + '_' + secrets.token_urlsafe(9).repl
 
 
 def create_project(session_id: str, data: Dict[str, Any]) -> str:
-    init_db(); pid = _id('th'); now = _now()
+    pid = _id('th'); now = _now()
     topic=(data.get('topic') or 'Tesis baru').strip(); program=(data.get('program') or 'Program Magister').strip(); student=(data.get('student') or 'Mahasiswa').strip(); name=(data.get('name') or topic or program)[:120]
     with get_connection() as conn:
         conn.execute("""INSERT INTO project

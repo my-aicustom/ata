@@ -60,11 +60,14 @@ class OpenRouterClient:
 
     def chat(self,messages:List[Dict[str,Any]],model:Optional[str]=None,temperature:float=.35,max_tokens:Optional[int]=None,tier:str='fast')->Dict[str,Any]:
         if not self.get_key(): return {'success':False,'error':'OPENROUTER_API_KEY belum dikonfigurasi','content':''}
-        limit=max_tokens or int(os.getenv('ATA_MAX_TOKENS','4096'))
+        is_vercel = bool(os.getenv('VERCEL'))
+        default_limit = 800 if is_vercel else 4096
+        limit = max_tokens or int(os.getenv('ATA_MAX_TOKENS', str(default_limit)))
+        timeout_budget = 8 if is_vercel else 60
         last=''
         models_to_try = [model] if model else _env_models(tier)
         for m in models_to_try:
-            result=self._post_json(CHAT_URL,{'model':m,'messages':messages,'temperature':temperature,'max_tokens':limit},timeout=60)
+            result=self._post_json(CHAT_URL,{'model':m,'messages':messages,'temperature':temperature,'max_tokens':limit},timeout=timeout_budget)
             if not result.get('success'):
                 err=str(result.get('error',''))
                 if 'can only afford' in err:
@@ -72,7 +75,7 @@ class OpenRouterClient:
                     m_afford = re.search(r'can only afford (\d+)', err)
                     if m_afford:
                         reduced = max(80, int(m_afford.group(1)) - 10)
-                        retry_res = self._post_json(CHAT_URL,{'model':m,'messages':messages,'temperature':temperature,'max_tokens':reduced},timeout=45)
+                        retry_res = self._post_json(CHAT_URL,{'model':m,'messages':messages,'temperature':temperature,'max_tokens':reduced},timeout=timeout_budget)
                         if retry_res.get('success'):
                             result = retry_res
             if not result.get('success'):
@@ -85,8 +88,9 @@ class OpenRouterClient:
             return {'success':True,'model':data.get('model',m),'content':str(content),'raw':data}
         if not model:
             fallbacks=['nvidia/nemotron-3.5-lightning:free','liquid/lfm-2.5-2.6b:free']
+            fb_timeout = 6 if is_vercel else 40
             for fm in fallbacks:
-                res=self._post_json(CHAT_URL,{'model':fm,'messages':messages,'temperature':temperature,'max_tokens':min(limit,2048)},timeout=40)
+                res=self._post_json(CHAT_URL,{'model':fm,'messages':messages,'temperature':temperature,'max_tokens':min(limit,1024 if is_vercel else 2048)},timeout=fb_timeout)
                 if not res.get('success'): continue
                 data=res['data']; content=((data.get('choices') or [{}])[0].get('message') or {}).get('content','')
                 if isinstance(content,list):
