@@ -138,7 +138,10 @@ class ATAHandler(SimpleHTTPRequestHandler):
         if path.startswith('/api/'): return self.send_json({'error':'Endpoint not found','path':path},404)
         return self._serve_static(path)
     def _serve_static(self,path):
-        rel='index.html' if path in ('','/') else path.lstrip('/'); target=(WEB/rel).resolve()
+        clean=path.split('?')[0].lstrip('/')
+        if clean.startswith('web/'): clean=clean[4:]
+        rel='index.html' if clean in ('','/','web') else clean
+        target=(WEB/rel).resolve()
         try: target.relative_to(WEB.resolve())
         except ValueError: return self.send_error(404)
         if not target.is_file(): return self.send_error(404)

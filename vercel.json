@@ -1,14 +1,7 @@
 {
   "version": 2,
-  "functions": {
-    "api/index.py": { "maxDuration": 60 }
-  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.py?__path=/api/$1" },
-    { "source": "/api", "destination": "/api/index.py?__path=/api" },
-    { "source": "/", "destination": "/web/index.html" },
-    { "source": "/studio.css", "destination": "/web/studio.css" },
-    { "source": "/studio.js", "destination": "/web/studio.js" },
-    { "source": "/(.*)", "destination": "/web/$1" }
+    { "source": "/api", "destination": "/api/index.py?__path=/api" }
   ]
 }

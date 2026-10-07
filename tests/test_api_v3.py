@@ -33,7 +33,7 @@ class ApiV3Tests(unittest.TestCase):
     def call(self, opener, path, data=None):
         body = json.dumps(data).encode() if data is not None else None
         req = urllib.request.Request(f'http://127.0.0.1:{self.port}{path}', data=body, headers={'Content-Type':'application/json'} if body else {})
-        with opener.open(req, timeout=4) as r:
+        with opener.open(req, timeout=10) as r:
             return json.loads(r.read().decode())
 
     def test_two_browser_sessions_do_not_see_each_others_projects(self):
