@@ -3,7 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from core.openrouter_client import OpenRouterClient
+from core.openrouter_client import OpenRouterClient, DEFAULT, DEFAULT_VISION
 
 
 class _Resp:
@@ -42,6 +42,12 @@ class MediaClientTests(unittest.TestCase):
         self.assertEqual(parts[0]['type'], 'text')
         self.assertEqual(parts[1]['type'], 'image_url')
         self.assertTrue(parts[1]['image_url']['url'].startswith('data:image/png;base64,'))
+
+    def test_default_models_do_not_use_free_endpoints_for_thesis_data(self):
+        defaults=[m for models in DEFAULT.values() for m in models] + list(DEFAULT_VISION)
+        self.assertTrue(defaults)
+        self.assertFalse(any(':free' in m for m in defaults))
+        self.assertIn('google/gemini-3.1-flash-lite', defaults)
 
     def test_media_without_api_key_fails_honestly(self):
         client = OpenRouterClient('')

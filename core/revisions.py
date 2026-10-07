@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 from typing import Any, Dict
 from . import db
+from .claims import parse_draft_claims
 
 
 def text_diff(before: str, after: str) -> str:
@@ -31,7 +32,16 @@ def accept_revision(project_id: str, revision_id: str) -> Dict[str,Any]:
     task=db.get_revision_task(project_id,revision_id)
     if not task: raise ValueError('Revision task tidak ditemukan')
     if task['status']!='proposed': raise ValueError('Hanya usulan berstatus proposed yang bisa diterima')
-    artifact=db.save_artifact(project_id,task['target_kind'] or 'draft',task['target_title'] or 'Revisi',task.get('proposed_text') or '',[])
+    previous_versions=db.list_artifact_versions(project_id,task['target_kind'] or 'draft',task['target_title'] or 'Revisi')
+    previous=previous_versions[0] if previous_versions else None
+    source_refs=list((previous or {}).get('source_refs') or [])
+    parsed=parse_draft_claims(task.get('proposed_text') or '')
+    for sentence in parsed.get('sentences',[]):
+        for ref in sentence.get('references',[]):
+            if ref.get('type') in {'brief','data'}:
+                rid=str(ref.get('id') or '').strip()
+                if rid and rid not in source_refs: source_refs.append(rid)
+    artifact=db.save_artifact(project_id,task['target_kind'] or 'draft',task['target_title'] or 'Revisi',task.get('proposed_text') or '',source_refs)
     db.update_revision_task_status(project_id,revision_id,'accepted')
     if task.get('directive_id'):
         db.update_directive_status(project_id,task['directive_id'],'addressed',f"artifact:{artifact['id']}:v{artifact['version']}")

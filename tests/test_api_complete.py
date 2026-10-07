@@ -50,8 +50,11 @@ class ApiCompleteTests(unittest.TestCase):
         from core import db
         src=next(x for x in db.list_sources(self.call(o,'/api/projects/active')['id']) if x['id']=='src-api')
         src['verified']=True; src['verification_status']='verified'; db.save_source(self.call(o,'/api/projects/active')['id'],src)
-        self.call(o,'/api/evidence/save',{'source_id':'src-api','locator':'hal. 7','text':'Bukti halaman tujuh'})
-        out=self.call(o,'/api/evidence/resolve',{'text':'Klaim [Brief: src-api, hal. 7].'})
+        doc=Document(); doc.add_paragraph('Bukti halaman tujuh yang dapat diverifikasi dari dokumen sumber.')
+        buf=io.BytesIO(); doc.save(buf)
+        saved=self.call(o,'/api/evidence/save',{'source_id':'src-api','locator':'bagian hasil','text':'Bukti halaman tujuh yang dapat diverifikasi dari dokumen sumber.','source_filename':'paper.docx','source_document_base64':base64.b64encode(buf.getvalue()).decode()})
+        self.assertEqual(saved['verification_status'],'verified')
+        out=self.call(o,'/api/evidence/resolve',{'text':'Klaim [Brief: src-api, bagian hasil].'})
         self.assertTrue(out['sentences'][0]['evidence_verified'])
         self.assertEqual(out['sentences'][0]['status'],'supported')
 

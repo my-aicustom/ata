@@ -4,10 +4,11 @@ from typing import Any, Dict, List, Optional
 from .openrouter_client import OpenRouterClient
 from . import db
 
-ROLE_TIERS={'onboarding':'fast','topic_framer':'reasoning','ledger':'fast','research_brief':'prose','matrix_synthesis':'reasoning','method_fit':'reasoning','drafting_assistant':'prose','critic':'reasoning','stats_reviewer':'reasoning','style_editor':'prose','abstract_writer':'prose','mock_examiner':'reasoning','defense_pack':'reasoning','contribution_builder':'prose','revision_editor':'prose'}
+ROLE_TIERS={'onboarding':'fast','topic_framer':'reasoning','source_finder':'reasoning','ledger':'fast','research_brief':'prose','matrix_synthesis':'reasoning','method_fit':'reasoning','drafting_assistant':'prose','critic':'reasoning','stats_reviewer':'reasoning','style_editor':'prose','abstract_writer':'prose','mock_examiner':'reasoning','defense_pack':'reasoning','contribution_builder':'prose','revision_editor':'prose'}
 ROLE_PROMPTS={
 'onboarding':'Bantu mahasiswa memetakan posisi tesis, target, bahan yang sudah ada, aturan prodi, metode, dan langkah tercepat berikutnya. Jangan berasumsi semua tesis berbentuk survei.',
 'topic_framer':'Rumuskan masalah, 3 kandidat judul, RQ dan tujuan berpasangan, lalu nilai FINER 1-4. Tandai klaim fenomena yang belum punya data sebagai [PERLU DATA AWAL].',
+'source_finder':'Bantu merumuskan query literatur dan kriteria inklusi/eksklusi. Jangan mengarang judul/DOI; daftar sumber aktual harus berasal dari pipeline OpenAlex/Crossref ATA.',
 'ledger':'Ekstrak arahan pembimbing menjadi tabel ID | kutipan | arahan | prioritas MUST/SHOULD/NICE | target | status open. Jangan mengarang kutipan.',
 'research_brief':'Buat brief sumber yang hanya memakai isi sumber yang diberikan. Cantumkan locator halaman/klausul. Jika tidak ada locator, tulis [PERLU CEK HALAMAN].',
 'matrix_synthesis':'Sintesis sumber yang benar-benar diberikan menjadi pola temuan, perbedaan metode, gap, dan implikasi ke RQ. Jangan menambahkan studi dari ingatan.',

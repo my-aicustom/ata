@@ -21,22 +21,7 @@ _SCHEMA_VERSION = 3
 
 
 def _backend() -> str:
-    url = os.getenv('DATABASE_URL', '')
-    if not url:
-        data_dir = os.getenv('ATA_DATA_DIR', '')
-        if not os.getenv('ATA_TESTING') and not ('temp' in data_dir.lower() or 'tmp' in data_dir.lower()):
-            try:
-                from pathlib import Path
-                cfg = Path(__file__).resolve().parent.parent / '.env.local'
-                if cfg.is_file():
-                    for line in cfg.read_text(encoding='utf-8').splitlines():
-                        if line.startswith('DATABASE_URL='):
-                            url = line.split('=', 1)[1].strip()
-                            os.environ['DATABASE_URL'] = url
-                            break
-            except Exception:
-                pass
-    return 'postgres' if url.startswith(('postgres://','postgresql://')) else 'sqlite'
+    return 'postgres' if os.getenv('DATABASE_URL', '').startswith(('postgres://','postgresql://')) else 'sqlite'
 
 
 def _data_dir() -> Path:
@@ -308,26 +293,51 @@ def list_sources(project_id: str, verified_only: bool=False) -> List[Dict[str, A
         d=dict(r)
         try:d['authors']=json.loads(d.get('authors') or '[]')
         except ValueError:d['authors']=[]
+        raw_brief=d.get('brief_json')
+        if isinstance(raw_brief,str) and raw_brief.strip():
+            try:d['brief_json']=json.loads(raw_brief)
+            except ValueError: pass
         d['verified']=bool(d.get('verified')); out.append(d)
     return out
 
 
+def _artifact_dict(row) -> Dict[str, Any]:
+    d=dict(row)
+    raw=d.get('source_refs')
+    if isinstance(raw,list): refs=raw
+    else:
+        try: refs=json.loads(raw or '[]')
+        except (ValueError,TypeError): refs=[]
+    d['source_refs']=[str(x) for x in refs] if isinstance(refs,list) else []
+    return d
+
+
 def save_artifact(project_id: str, kind: str, title: str, content: str, source_refs: Optional[List[str]]=None) -> Dict[str, Any]:
-    now=_now(); aid=_id('art')
+    now=_now(); aid=_id('art'); refs=[str(x) for x in (source_refs or []) if str(x).strip()]
+    try:
+        from .claims import parse_draft_claims
+        parsed=parse_draft_claims(content or '')
+        for sentence in parsed.get('sentences',[]):
+            for ref in sentence.get('references',[]):
+                if ref.get('type') in {'brief','data'}:
+                    rid=str(ref.get('id') or '').strip()
+                    if rid and rid not in refs: refs.append(rid)
+    except Exception:
+        pass
     with get_connection() as conn:
         row=conn.execute('SELECT COALESCE(MAX(version),0) AS max_version FROM artifact WHERE project_id=? AND kind=? AND title=?',(project_id,kind,title)).fetchone(); version=int(row['max_version'])+1
-        conn.execute('INSERT INTO artifact(id,project_id,kind,title,version,content,source_refs,created_at) VALUES(?,?,?,?,?,?,?,?)',(aid,project_id,kind,title,version,content,json.dumps(source_refs or []),now))
-    return {'id':aid,'project_id':project_id,'kind':kind,'title':title,'version':version,'content':content,'created_at':now}
+        conn.execute('INSERT INTO artifact(id,project_id,kind,title,version,content,source_refs,created_at) VALUES(?,?,?,?,?,?,?,?)',(aid,project_id,kind,title,version,content,json.dumps(refs),now))
+    return {'id':aid,'project_id':project_id,'kind':kind,'title':title,'version':version,'content':content,'source_refs':refs,'created_at':now}
 
 
 def list_artifacts(project_id: str) -> List[Dict[str, Any]]:
     with get_connection() as conn: rows=conn.execute("""SELECT a.* FROM artifact a JOIN (SELECT kind,title,MAX(version) v FROM artifact WHERE project_id=? GROUP BY kind,title) latest ON a.kind=latest.kind AND a.title=latest.title AND a.version=latest.v WHERE a.project_id=? ORDER BY a.created_at DESC""",(project_id,project_id)).fetchall()
-    return [dict(r) for r in rows]
+    return [_artifact_dict(r) for r in rows]
 
 
 def list_artifact_versions(project_id: str, kind: str, title: str) -> List[Dict[str, Any]]:
     with get_connection() as conn: rows=conn.execute('SELECT * FROM artifact WHERE project_id=? AND kind=? AND title=? ORDER BY version DESC',(project_id,kind,title)).fetchall()
-    return [dict(r) for r in rows]
+    return [_artifact_dict(r) for r in rows]
 
 
 def log_ai_usage(agent: str, action: str, artifact: str='', project_id: Optional[str]=None) -> None:
@@ -344,14 +354,35 @@ def storage_status() -> Dict[str, Any]:
 def get_artifact(project_id: str, artifact_id: str) -> Optional[Dict[str, Any]]:
     with get_connection() as conn:
         row=conn.execute('SELECT * FROM artifact WHERE project_id=? AND id=?',(project_id,artifact_id)).fetchone()
-    return dict(row) if row else None
+    return _artifact_dict(row) if row else None
 
 
-def save_evidence(project_id: str, source_id: str, locator: str, text: str, evidence_id: Optional[str]=None) -> str:
+def save_evidence(project_id: str, source_id: str, locator: str, text: str, evidence_id: Optional[str]=None, verification: Optional[Dict[str,Any]]=None) -> str:
+    """Persist evidence without changing schema.
+
+    New rows encode verification metadata inside the existing text column. Legacy plain-text
+    rows remain readable and are treated as manual/unverified.
+    """
     eid=evidence_id or _id('ev')
+    meta=dict(verification or {})
+    status='verified' if meta.get('verified') is True else 'manual_unverified'
+    payload=json.dumps({'__ata_evidence_v1__':True,'quote':str(text),'verification_status':status,'verification':meta},ensure_ascii=False)
     with get_connection() as conn:
-        conn.execute('INSERT INTO evidence(project_id,id,source_id,locator,text) VALUES(?,?,?,?,?) ON CONFLICT(project_id,id) DO UPDATE SET source_id=excluded.source_id,locator=excluded.locator,text=excluded.text',(project_id,eid,source_id,locator,text))
+        conn.execute('INSERT INTO evidence(project_id,id,source_id,locator,text) VALUES(?,?,?,?,?) ON CONFLICT(project_id,id) DO UPDATE SET source_id=excluded.source_id,locator=excluded.locator,text=excluded.text',(project_id,eid,source_id,locator,payload))
     return eid
+
+
+def _decode_evidence_row(row) -> Dict[str,Any]:
+    d=dict(row); raw=d.get('text') or ''
+    try: payload=json.loads(raw)
+    except (ValueError,TypeError): payload=None
+    if isinstance(payload,dict) and payload.get('__ata_evidence_v1__'):
+        d['text']=str(payload.get('quote') or '')
+        d['verification_status']=str(payload.get('verification_status') or 'manual_unverified')
+        d['verification']=payload.get('verification') if isinstance(payload.get('verification'),dict) else {}
+    else:
+        d['verification_status']='manual_unverified'; d['verification']={}
+    return d
 
 
 def list_evidence(project_id: str, source_id: Optional[str]=None) -> List[Dict[str, Any]]:
@@ -359,7 +390,7 @@ def list_evidence(project_id: str, source_id: Optional[str]=None) -> List[Dict[s
     if source_id is not None: sql+=' AND source_id=?'; params.append(source_id)
     sql+=' ORDER BY source_id,locator,id'
     with get_connection() as conn: rows=conn.execute(sql,params).fetchall()
-    return [dict(r) for r in rows]
+    return [_decode_evidence_row(r) for r in rows]
 
 
 def create_revision_task(project_id: str, directive_id: Optional[str], target_kind: str, target_title: str, before_text: str, proposed_text: str, rationale: str='') -> Dict[str, Any]:
@@ -404,3 +435,50 @@ def list_defense_scores(project_id: str, limit: int=100) -> List[Dict[str, Any]]
         except (ValueError,TypeError): d['weakness']=''
         out.append(d)
     return out
+
+# --- pre-UAT helpers using existing schema ---
+def upsert_consistency_rows(project_id: str, rows: Iterable[Dict[str,Any]]) -> int:
+    count=0
+    with get_connection() as conn:
+        for item in rows:
+            if not isinstance(item,dict): continue
+            element=str(item.get('element') or '').strip()
+            if not element: continue
+            score=item.get('score')
+            if score is not None:
+                try: score=int(score)
+                except (TypeError,ValueError): score=None
+                if score is not None and not 1 <= score <= 4: score=None
+            conn.execute('''INSERT INTO consistency_row(project_id,element,content,score,critique) VALUES(?,?,?,?,?)
+            ON CONFLICT(project_id,element) DO UPDATE SET content=excluded.content,score=excluded.score,critique=excluded.critique''',
+            (project_id,element,str(item.get('content') or ''),score,str(item.get('critique') or '')))
+            count+=1
+    return count
+
+
+def list_consistency_rows(project_id: str) -> List[Dict[str,Any]]:
+    with get_connection() as conn:
+        rows=conn.execute('SELECT * FROM consistency_row WHERE project_id=? ORDER BY element',(project_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def replace_consistency_rows(project_id: str, rows: Iterable[Dict[str,Any]]) -> int:
+    """Replace the project's consistency matrix atomically so deleted UI rows cannot linger."""
+    clean=[]
+    for item in rows:
+        if not isinstance(item,dict):
+            continue
+        element=str(item.get('element') or '').strip()
+        if not element:
+            continue
+        score=item.get('score')
+        if score is not None:
+            try: score=int(score)
+            except (TypeError,ValueError): score=None
+            if score is not None and not 1 <= score <= 4: score=None
+        clean.append((project_id,element,str(item.get('content') or ''),score,str(item.get('critique') or '')))
+    with get_connection() as conn:
+        conn.execute('DELETE FROM consistency_row WHERE project_id=?',(project_id,))
+        for row in clean:
+            conn.execute('INSERT INTO consistency_row(project_id,element,content,score,critique) VALUES(?,?,?,?,?)',row)
+    return len(clean)

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from core import db
-from core.evidence import resolve_draft_evidence
+from core.evidence import resolve_draft_evidence, verify_quote_in_document
 
 
 class EvidenceResolutionTests(unittest.TestCase):
@@ -13,7 +13,9 @@ class EvidenceResolutionTests(unittest.TestCase):
         db.reset_for_tests(); db.init_db()
         self.pid = db.create_project('s1', {'student':'A','program':'S2','topic':'T'})
         db.save_source(self.pid, {'id':'src1','type':'journal','title':'Paper A','authors':['A'],'year':2025,'verified':True,'verification_status':'verified'})
-        db.save_evidence(self.pid, 'src1', 'hal. 12', 'Temuan inti yang mendukung klaim.')
+        document='[PAGE 12]\nTemuan inti yang mendukung klaim.'
+        verification=verify_quote_in_document('Temuan inti yang mendukung klaim.',document,'hal. 12')
+        db.save_evidence(self.pid, 'src1', 'hal. 12', 'Temuan inti yang mendukung klaim.', verification=verification)
     def tearDown(self):
         if self.old is None: os.environ.pop('ATA_DATA_DIR', None)
         else: os.environ['ATA_DATA_DIR'] = self.old
